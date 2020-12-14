@@ -2,7 +2,11 @@ package ru.vas.khmyrov;
 
 import javafx.application.Application;
 import javafx.geometry.Orientation;
+import javafx.geometry.Side;
 import javafx.scene.Scene;
+import javafx.scene.chart.AreaChart;
+import javafx.scene.chart.NumberAxis;
+import javafx.scene.chart.XYChart;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -15,6 +19,7 @@ import ru.vas.khmyrov.utils.IntegerTextField;
 import java.util.*;
 
 import static java.util.stream.Collectors.joining;
+import static java.util.stream.Collectors.toList;
 
 public class Main extends Application {
 
@@ -28,7 +33,8 @@ public class Main extends Application {
 
     Button btn;
     Button btnStartAlgorithm;
-    Button btnLastIteration;
+    Button btnEvaluateBestSum;
+    Button btnFinalSelection;
 
     TextArea outputAllArrayTextArea;
 
@@ -54,10 +60,20 @@ public class Main extends Application {
     Label outputFitnessLabel7;
     Label outputFitnessLabel8;
     Label outputFitnessLabel9;
-    Label finalElementsSumOfArray;
+    Label theBestSumOfTop10Arrays;
+    Label sumAfterSelectionOfTop10Arrays;
+
+    AreaChart<Number, Number> areaChart;
+
 
     HashMap<Integer, Double> tmpRandValueHashMap;
     List<List<Double>> top10ResultsByMinSum;
+    List<Double> finalArrayAfterGeneticSelection;
+
+    double theBestSum = 0.0;
+    int theBestSumIndexOfArrays = 0;
+    final int COUNT_OF_ARRAY_BEFORE_SELECTION = 10;
+//    final static int COUNT_OF_ARRAY_BEFORE_SELECTION = 10;
 
     public static void main(String[] args) {
         Application.launch();
@@ -79,10 +95,120 @@ public class Main extends Application {
 //        controller.setAppFX(this);
         addlistenersToIntegerTextFields(btn, inputSizeText, inputSizeFitnessText);
         addListenersToStartAlgorithmButton(btnStartAlgorithm);
+        addListenersToEvaluateBestSumButton(btnEvaluateBestSum);
+        addListenersToFinalSelectionButton(btnFinalSelection);
         primaryStage.show();
     }
 
-    //    public void addListenersToStartAlgorithmButton(Button btnStartAlgorithm, TextArea outputFitnessArrayTextArea0, TextArea outputFitnessArrayTextArea1, TextArea outputFitnessArrayTextArea2) {
+    private void addListenersToEvaluateBestSumButton(Button btnEvaluateBestSum) {
+        btnEvaluateBestSum.setOnAction(event -> {
+            if (tmpRandValueHashMap == null || tmpRandValueHashMap.isEmpty()) {
+                Alert alert = new Alert(Alert.AlertType.WARNING, "Сначала сгенерируйте случайные значения!");
+                alert.showAndWait();
+                return;
+            }
+
+            if (top10ResultsByMinSum == null || top10ResultsByMinSum.isEmpty()) {
+                Alert alert = new Alert(Alert.AlertType.WARNING, "Сначала примените функцию к сгенерированным значениям!");
+                alert.showAndWait();
+                return;
+            }
+
+            theBestSum = returnTheBestSumOfTop10Arrays();
+            theBestSumIndexOfArrays = returnIndexOfTheBestSumOfTop10Arrays();
+            theBestSumOfTop10Arrays.setText("Лучшая сумма до скрещивания = " + theBestSum);
+
+
+        });
+    }
+
+    private double returnTheBestSumOfTop10Arrays() {
+        double result = 1_000_000; //example max value of double
+        for (int i = 0; i < 10; i++) {
+            double tmp = top10ResultsByMinSum.get(i).get(80);
+            if (tmp < result) {
+                result = tmp;
+            }
+        }
+
+        return result;
+    }
+
+    private int returnIndexOfTheBestSumOfTop10Arrays() {
+        double result = 1_000_000; //example max value of double
+        int index = 0;
+        for (int i = 0; i < 10; i++) {
+            double tmp = top10ResultsByMinSum.get(i).get(80);
+            if (tmp < result) {
+                result = tmp;
+                index = i;
+            }
+        }
+
+        return index;
+    }
+
+    private void addListenersToFinalSelectionButton(Button btnFinalSelection) {
+        btnFinalSelection.setOnAction(event -> {
+            if (tmpRandValueHashMap == null || tmpRandValueHashMap.isEmpty()) {
+                Alert alert = new Alert(Alert.AlertType.WARNING, "Сначала сгенерируйте случайные значения!");
+                alert.showAndWait();
+                return;
+            }
+
+            if (top10ResultsByMinSum == null || top10ResultsByMinSum.isEmpty()) {
+                Alert alert = new Alert(Alert.AlertType.WARNING, "Сначала примените функцию к сгенерированным значениям!");
+                alert.showAndWait();
+                return;
+            }
+
+            // TODO: 13.12.2020 Скрещивание по 8 лучших и 8 худших элементов
+            evaluateTheWorstAndBadEightValuesOfArray(theBestSumIndexOfArrays);
+
+
+        });
+    }
+
+    private void evaluateTheWorstAndBadEightValuesOfArray(int indexOfTheBestSumArray) {
+        finalArrayAfterGeneticSelection = new ArrayList<>(inputSizeFitnessInt);
+        int limit = inputSizeFitnessInt / 10;
+
+        List<Double> currentTmpBestArray = top10ResultsByMinSum.get(indexOfTheBestSumArray);
+        finalArrayAfterGeneticSelection.addAll(currentTmpBestArray.stream().sorted().limit(limit).collect(toList()));
+
+        // TODO: 14.12.2020 fori для всех других 9 массивов
+        System.out.println(finalArrayAfterGeneticSelection);
+
+        int limitCount;
+        for (int i = 0; i < 10; i++) {
+            if (i == indexOfTheBestSumArray) {
+                continue;
+            }
+            currentTmpBestArray = top10ResultsByMinSum.get(i).stream().sorted().collect(toList());
+            limitCount = 0;
+            for (int j = 0; limitCount < limit && j < inputSizeFitnessInt; j++) {
+                double currentTmpElement = currentTmpBestArray.get(j);
+                if (!finalArrayAfterGeneticSelection.contains(currentTmpElement)) {
+                    finalArrayAfterGeneticSelection.add(currentTmpElement);
+                    limitCount++;
+                }
+            }
+        }
+
+        System.out.println("Длина финального массива = " + finalArrayAfterGeneticSelection.size());
+        System.out.println("Arrays.toString = " + Arrays.toString(finalArrayAfterGeneticSelection.toArray()));
+        System.out.println("toString() = " + finalArrayAfterGeneticSelection.toString());
+        System.out.println("print name of array = " + finalArrayAfterGeneticSelection);
+        double sum = 0.0;
+        for(Double d : finalArrayAfterGeneticSelection){
+            sum += d;
+        }
+        sumAfterSelectionOfTop10Arrays.setText("Cумма элементов после скрещивания = " + sum);
+        outputFinalArrayTextArea.setText(finalArrayAfterGeneticSelection.toString());
+        System.out.println("сумма элементов после скрещивания = " + sum);
+
+    }
+
     public void addListenersToStartAlgorithmButton(Button btnStartAlgorithm) {
         btnStartAlgorithm.setOnAction(event -> {
             if (tmpRandValueHashMap == null || tmpRandValueHashMap.isEmpty()) {
@@ -137,7 +263,7 @@ public class Main extends Application {
             tmpRandValueHashMap = new HashMap<>();
             for (int i = 0; i < inputSizeInt; i++) {
                 double randomValue = rangeMin + (rangeMax - rangeMin) * r.nextDouble();//1 var
-                String randomValueStr = String.format("%.4f", randomValue).replace(",", ".");
+                String randomValueStr = String.format("%.5f", randomValue).replace(",", ".");
                 tmpRandValueHashMap.put(i, Double.parseDouble(randomValueStr));
 
                 System.out.print(randomValueStr + ";");
@@ -327,8 +453,10 @@ public class Main extends Application {
         btn.setText("Сгенерировать слчайные числа");
         btnStartAlgorithm = new Button();
         btnStartAlgorithm.setText("Применить функцию");
-        btnLastIteration = new Button();
-        btnLastIteration.setText("Скрещивание");
+        btnFinalSelection = new Button();
+        btnFinalSelection.setText("Скрещивание");
+        btnEvaluateBestSum = new Button();
+        btnEvaluateBestSum.setText("Лучшая сумма");
 
         outputAllArrayTextArea = new TextArea();
         outputAllArrayTextArea.setEditable(false);
@@ -386,7 +514,40 @@ public class Main extends Application {
         outputFitnessLabel7 = new Label();
         outputFitnessLabel8 = new Label();
         outputFitnessLabel9 = new Label();
-        finalElementsSumOfArray = new Label();
+        theBestSumOfTop10Arrays = new Label();
+        sumAfterSelectionOfTop10Arrays = new Label();
+
+        //графики
+//        areaChart = new AreaChart<>();
+
+        final NumberAxis xAxis = new NumberAxis(1, 1000, 1);
+        final NumberAxis yAxis = new NumberAxis();
+        areaChart = new AreaChart<>(xAxis, yAxis);
+        areaChart.setTitle("Revenue");
+
+        areaChart.setLegendSide(Side.BOTTOM);
+        XYChart.Series<Number, Number> series = new XYChart.Series<>();
+
+        // теперь заполняем его данными
+        // тут я строю правую ветку параболы
+        for (int x = 0; x < 100; ++x) {
+            // чтобы добавить к нашему массиву точек данные,
+            // мы обращаемся к нему через series.getData()
+            // и используем метод add
+            //
+            // методу add в качестве параметров передаем точку с координатами (x, x^2)
+            // делаем это для x меняющегося от 0 до 99
+            series.getData().add(new XYChart.Data<>(x, x * x));
+        }
+
+        // сформированный массив точек, передаем графику для отображения
+        areaChart.getData().setAll(series);
+
+        FlowPane evaluateSumPanel = new FlowPane(Orientation.HORIZONTAL, btnEvaluateBestSum, theBestSumOfTop10Arrays);
+        evaluateSumPanel.setHgap(10);
+
+        FlowPane evaluateFinalSumPanel = new FlowPane(Orientation.HORIZONTAL, btnFinalSelection, sumAfterSelectionOfTop10Arrays);
+        evaluateSumPanel.setHgap(10);
 
         FlowPane root = new FlowPane(Orientation.VERTICAL, inputSizeLabel, inputSizeText, inputSizeFitnessLabel, inputSizeFitnessText,
                 btn, outputAllArrayTextArea, btnStartAlgorithm,
@@ -395,14 +556,19 @@ public class Main extends Application {
                 outputFitnessArrayTextArea4, outputFitnessLabel4, outputFitnessArrayTextArea5, outputFitnessLabel5,
                 outputFitnessArrayTextArea6, outputFitnessLabel6, outputFitnessArrayTextArea7, outputFitnessLabel7,
                 outputFitnessArrayTextArea8, outputFitnessLabel8, outputFitnessArrayTextArea9, outputFitnessLabel9,
-                btnLastIteration, finalElementsSumOfArray);
+                evaluateSumPanel,
+                evaluateFinalSumPanel,
+                outputFinalArrayTextArea
+                , areaChart
+//                finalElementsSumOfArray
+        );
         root.setVgap(10);
         Scene scene = new Scene(root, 500, 500);
         primaryStage.setFullScreen(true);
         primaryStage.setScene(scene);
     }
 
-    private void fillOutputTextAreasAndFields(){
+    private void fillOutputTextAreasAndFields() {
         outputFitnessArrayTextArea0.setText(String.valueOf(top10ResultsByMinSum.get(0).stream().filter(val -> val < 10).map(Object::toString).count()));
         outputFitnessArrayTextArea0.setText(top10ResultsByMinSum.get(0).stream().filter(val -> val < 10).map(Object::toString).collect(joining(";")));
         outputFitnessArrayTextArea1.setText(top10ResultsByMinSum.get(1).stream().filter(val -> val < 10).map(Object::toString).collect(joining(";")));
