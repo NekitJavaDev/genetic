@@ -2,16 +2,15 @@ package ru.vas.khmyrov;
 
 import javafx.application.Application;
 import javafx.geometry.Orientation;
+import javafx.geometry.Pos;
 import javafx.geometry.Side;
 import javafx.scene.Scene;
 import javafx.scene.chart.AreaChart;
 import javafx.scene.chart.NumberAxis;
 import javafx.scene.chart.XYChart;
-import javafx.scene.control.Alert;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.TextArea;
+import javafx.scene.control.*;
 import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.apache.commons.math3.random.RandomDataGenerator;
 import ru.vas.khmyrov.utils.IntegerTextField;
@@ -22,7 +21,6 @@ import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 
 public class Main extends Application {
-
     Label inputSizeLabel;
     Label inputSizeFitnessLabel;
 
@@ -32,7 +30,8 @@ public class Main extends Application {
     int inputSizeFitnessInt;
 
     Button btn;
-    Button btnStartAlgorithm;
+    Button btnStartGeneticAlgorithm;
+    Button btnStartSwapAlgorithm;
     Button btnEvaluateBestSum;
     Button btnFinalSelection;
 
@@ -62,18 +61,27 @@ public class Main extends Application {
     Label outputFitnessLabel9;
     Label theBestSumOfTop10Arrays;
     Label sumAfterSelectionOfTop10Arrays;
+    Label timeToEvaluateByGeneticAlgorithmLbl;
+    Label timeToEvaluateBySwapAlgorithmLbl;
 
     AreaChart<Number, Number> areaChart;
 
-
     HashMap<Integer, Double> tmpRandValueHashMap;
+    HashMap<Integer, Double> tmpRandValueHashMapCloneToSwap;
+    HashMap<Integer, Double> resultFitnessGeneratedMap;
     List<List<Double>> top10ResultsByMinSum;
     List<Double> finalArrayAfterGeneticSelection;
 
     double theBestSum = 0.0;
     int theBestSumIndexOfArrays = 0;
-    final int COUNT_OF_ARRAY_BEFORE_SELECTION = 10;
-//    final static int COUNT_OF_ARRAY_BEFORE_SELECTION = 10;
+    //    final int COUNT_OF_ARRAY_BEFORE_SELECTION = 10;
+    //    final static int COUNT_OF_ARRAY_BEFORE_SELECTION = 10;
+    long startGeneticFunctionTime = 0;
+    long finishGeneticFunctionTime = 0;
+    long differenceGeneticFunctionTime = 0;
+    long startSwapFunctionTime = 0;
+    long finishSwapFunctionTime = 0;
+    long differenceSwapFunctionTime = 0;
 
     public static void main(String[] args) {
         Application.launch();
@@ -83,20 +91,19 @@ public class Main extends Application {
     public void start(Stage primaryStage) throws Exception {
         primaryStage.setTitle("Genetic algorithm application");
         primaryStage.setWidth(800);
-        primaryStage.setHeight(800);
-
+        primaryStage.setHeight(1000);
         showStartWindow(primaryStage);
     }
 
     public void showStartWindow(Stage primaryStage) {
         initComponentsOnStartWindow(primaryStage);
 
-//        Controller controller = new Controller();
-//        controller.setAppFX(this);
         addlistenersToIntegerTextFields(btn, inputSizeText, inputSizeFitnessText);
-        addListenersToStartAlgorithmButton(btnStartAlgorithm);
+        addListenersToStartGeneticAlgorithmButton(btnStartGeneticAlgorithm);
+        addListenersToStartSwapAlgorithmButton(btnStartSwapAlgorithm);
         addListenersToEvaluateBestSumButton(btnEvaluateBestSum);
         addListenersToFinalSelectionButton(btnFinalSelection);
+
         primaryStage.show();
     }
 
@@ -114,18 +121,16 @@ public class Main extends Application {
                 return;
             }
 
-            theBestSum = returnTheBestSumOfTop10Arrays();
-            theBestSumIndexOfArrays = returnIndexOfTheBestSumOfTop10Arrays();
+            theBestSum = returnTheBestSumOfTop10Arrays(inputSizeFitnessInt);
+            theBestSumIndexOfArrays = returnIndexOfTheBestSumOfTop10Arrays(inputSizeFitnessInt);
             theBestSumOfTop10Arrays.setText("Лучшая сумма до скрещивания = " + theBestSum);
-
-
         });
     }
 
-    private double returnTheBestSumOfTop10Arrays() {
-        double result = 1_000_000; //example max value of double
+    private double returnTheBestSumOfTop10Arrays(int lastIndexIsSum) {
+        double result = Double.MAX_VALUE; //example max value of double
         for (int i = 0; i < 10; i++) {
-            double tmp = top10ResultsByMinSum.get(i).get(80);
+            double tmp = top10ResultsByMinSum.get(i).get(lastIndexIsSum);
             if (tmp < result) {
                 result = tmp;
             }
@@ -134,11 +139,11 @@ public class Main extends Application {
         return result;
     }
 
-    private int returnIndexOfTheBestSumOfTop10Arrays() {
-        double result = 1_000_000; //example max value of double
+    private int returnIndexOfTheBestSumOfTop10Arrays(int lastIndexIsSum) {
+        double result = Double.MAX_VALUE; //example max value of double
         int index = 0;
         for (int i = 0; i < 10; i++) {
-            double tmp = top10ResultsByMinSum.get(i).get(80);
+            double tmp = top10ResultsByMinSum.get(i).get(lastIndexIsSum);
             if (tmp < result) {
                 result = tmp;
                 index = i;
@@ -162,9 +167,7 @@ public class Main extends Application {
                 return;
             }
 
-            // TODO: 13.12.2020 Скрещивание по 8 лучших и 8 худших элементов
             evaluateTheWorstAndBadEightValuesOfArray(theBestSumIndexOfArrays);
-
 
         });
     }
@@ -176,7 +179,6 @@ public class Main extends Application {
         List<Double> currentTmpBestArray = top10ResultsByMinSum.get(indexOfTheBestSumArray);
         finalArrayAfterGeneticSelection.addAll(currentTmpBestArray.stream().sorted().limit(limit).collect(toList()));
 
-        // TODO: 14.12.2020 fori для всех других 9 массивов
         System.out.println(finalArrayAfterGeneticSelection);
 
         int limitCount;
@@ -197,49 +199,132 @@ public class Main extends Application {
 
         System.out.println("Длина финального массива = " + finalArrayAfterGeneticSelection.size());
         System.out.println("Arrays.toString = " + Arrays.toString(finalArrayAfterGeneticSelection.toArray()));
-        System.out.println("toString() = " + finalArrayAfterGeneticSelection.toString());
-        System.out.println("print name of array = " + finalArrayAfterGeneticSelection);
-        double sum = 0.0;
-        for(Double d : finalArrayAfterGeneticSelection){
-            sum += d;
-        }
-        sumAfterSelectionOfTop10Arrays.setText("Cумма элементов после скрещивания = " + sum);
-        outputFinalArrayTextArea.setText(finalArrayAfterGeneticSelection.toString());
-        System.out.println("сумма элементов после скрещивания = " + sum);
 
+        double finalSum = finalArrayAfterGeneticSelection.stream().mapToDouble(d -> d).sum();
+        System.out.println(finalSum);
+        sumAfterSelectionOfTop10Arrays.setText("Cумма элементов после скрещивания = " + finalSum);
+        outputFinalArrayTextArea.setText(finalArrayAfterGeneticSelection.toString());
+        System.out.println("сумма элементов после скрещивания = " + finalSum);
     }
 
-    public void addListenersToStartAlgorithmButton(Button btnStartAlgorithm) {
+    private void addListenersToStartGeneticAlgorithmButton(Button btnStartAlgorithm) {
         btnStartAlgorithm.setOnAction(event -> {
             if (tmpRandValueHashMap == null || tmpRandValueHashMap.isEmpty()) {
                 Alert alert = new Alert(Alert.AlertType.WARNING, "Сначала сгенерируйте случайные значения!");
                 alert.showAndWait();
                 return;
             }
-
-
-            System.out.println("--------FITNESS FUNCTION CALCULATING--------------");
+            System.out.println("--------FITNESS GENETIC FUNCTION CALCULATING--------------");
 
             top10ResultsByMinSum = new ArrayList<>(10);
 
-            for (int i = 0; i < 10; i++) {
-                List<List<Double>> resultFitnessGeneratedLists = genericRandomArraysFromFitnessArray(inputSizeInt, inputSizeFitnessInt, 10_000);
-                double minTmpSum = resultFitnessGeneratedLists.parallelStream().map(list -> list.get(list.size() - 1)).min(Double::compareTo).get();
-                for (List<Double> doubleListWithLastValueAsSum : resultFitnessGeneratedLists) {
-                    if (doubleListWithLastValueAsSum.get(inputSizeFitnessInt) == minTmpSum) {
-                        top10ResultsByMinSum.add(doubleListWithLastValueAsSum);
-                        break;
-                    }
+            startTimeOfEvaluatingGeneticFunction();
+            List<List<Double>> resultFitnessGeneratedLists = genericRandomArraysFromFitnessArray(inputSizeInt, inputSizeFitnessInt, 50_000);
+            System.out.println("все эле-ты до скрещивания");
+
+            top10ResultsByMinSum.addAll(resultFitnessGeneratedLists.parallelStream().sorted((o1, o2) -> {
+                if (o1.get(o1.size() - 1).equals(o2.get(o2.size() - 1))) {
+                    return 0;
+                } else if (o1.get(o1.size() - 1) > o2.get(o2.size() - 1)) {
+                    return 1;
+                } else {
+                    return -1;
                 }
+            }).limit(10).collect(toList()));
+
+            for (List<Double> doubles : top10ResultsByMinSum) {
+                System.out.println(doubles);
             }
 
-            fillOutputTextAreasAndFields();
+            finishTimeOfEvaluatingGeneticFunction();
+            fillOutputTextAreasAndFields(inputSizeFitnessInt);
+        });
+    }
+
+    // TODO: 22.12.2020 Доделать метод перестановки
+    private void addListenersToStartSwapAlgorithmButton(Button btnStartSwapAlgorithm) {
+        btnStartSwapAlgorithm.setOnAction(event -> {
+            if (tmpRandValueHashMap == null || tmpRandValueHashMap.isEmpty()) {
+                Alert alert = new Alert(Alert.AlertType.WARNING, "Сначала сгенерируйте случайные значения!");
+                alert.showAndWait();
+                return;
+            }
+            System.out.println("--------FITNESS SWAP FUNCTION CALCULATING--------------");
+
+            startTimeOfEvaluatingSwapFunction();
+
+            resultFitnessGeneratedMap = genericRandomArrayWithInputLength(inputSizeInt, inputSizeFitnessInt);
+            System.out.println("все эле-ты до обмена");
+            final int ITERATOR_COUNT_TO_SWAP_ALGORITHM = 100_000;
+
+            startSwapAlgorithm(resultFitnessGeneratedMap, ITERATOR_COUNT_TO_SWAP_ALGORITHM);
+
+            fillOutputFinalArrayTextAreaBySwapAlgorithm();
+
+            finishTimeOfEvaluatingSwapFunction();
 
         });
+    }
+
+    private void fillOutputFinalArrayTextAreaBySwapAlgorithm() {
+        sumAfterSelectionOfTop10Arrays.setText("Сумма элементов = " + resultFitnessGeneratedMap.get(inputSizeInt));
+        resultFitnessGeneratedMap.remove(inputSizeInt);
+        outputFinalArrayTextArea.setText(resultFitnessGeneratedMap.toString() + "\n" + resultFitnessGeneratedMap.values());
+    }
+
+    // TODO: 23.12.2020
+
+    private boolean swapTwoElementsFromMapsIfNewSumIsBest(int indexOfBigMap, int indexOfSmallResultMap) {
+        tmpRandValueHashMapCloneToSwap.put(indexOfSmallResultMap, tmpRandValueHashMap.get(indexOfSmallResultMap));
+        resultFitnessGeneratedMap.remove(indexOfSmallResultMap);
+        resultFitnessGeneratedMap.put(indexOfBigMap, tmpRandValueHashMap.get(indexOfBigMap));
+        double newSum = resultFitnessGeneratedMap.entrySet().stream().filter(pair -> pair.getKey() != inputSizeInt).mapToDouble(Map.Entry::getValue).sum();
+        if (newSum < resultFitnessGeneratedMap.get(inputSizeInt)) {
+            resultFitnessGeneratedMap.put(inputSizeInt, newSum);
+            return true;
+        } else {
+            resultFitnessGeneratedMap.remove(indexOfBigMap);
+            resultFitnessGeneratedMap.put(indexOfSmallResultMap, tmpRandValueHashMap.get(indexOfSmallResultMap));
+            tmpRandValueHashMapCloneToSwap.put(indexOfSmallResultMap, null);
+            return false;
+        }
 
     }
 
-    public void addlistenersToIntegerTextFields(Button btn, IntegerTextField inputSizeText, IntegerTextField inputSizeFitnessText) {
+    private void startSwapAlgorithm(HashMap<Integer, Double> inputArrayListToSwap, final int iterator_count) {
+        RandomDataGenerator rdg = new RandomDataGenerator();
+        tmpRandValueHashMapCloneToSwap = new HashMap<>(tmpRandValueHashMap);
+
+        //затираем в null все ключи из 1-ой Map, которые сгенирировались в необходимой Map.
+        Set<Integer> uniqueKeys = inputArrayListToSwap.keySet();
+        for (Map.Entry<Integer, Double> map : tmpRandValueHashMapCloneToSwap.entrySet()) {
+            if (uniqueKeys.contains(map.getKey())) {
+                tmpRandValueHashMapCloneToSwap.put(map.getKey(), null);
+            }
+        }
+
+        int randomInt;
+        int tmpCurrentIndexOfBigArray;
+        int tmpCurrentIndexOfResultSwapArray;
+
+        for (int i = 0; i < iterator_count; i++) {
+            tmpCurrentIndexOfBigArray = rdg.nextInt(0, inputSizeInt - 1);
+            while (inputArrayListToSwap.containsKey(tmpCurrentIndexOfBigArray)) {
+                tmpCurrentIndexOfBigArray = rdg.nextInt(0, inputSizeInt - 1);
+            }
+
+            randomInt = rdg.nextInt(0, uniqueKeys.size() - 1);
+            while (!uniqueKeys.stream().filter(key -> key != inputSizeInt).skip(randomInt).findFirst().isPresent()) {
+                randomInt = rdg.nextInt(0, uniqueKeys.size() - 1);
+            }
+            tmpCurrentIndexOfResultSwapArray = uniqueKeys.stream().filter(key -> key != inputSizeInt).skip(randomInt).findFirst().get();
+
+            System.out.println("tmpCurrentIndexOfResultSwapArray = " + tmpCurrentIndexOfResultSwapArray);
+            boolean isSwapped = swapTwoElementsFromMapsIfNewSumIsBest(tmpCurrentIndexOfBigArray, tmpCurrentIndexOfResultSwapArray);
+        }
+    }
+
+    private void addlistenersToIntegerTextFields(Button btn, IntegerTextField inputSizeText, IntegerTextField inputSizeFitnessText) {
         btn.setOnAction(event -> {
             if ((inputSizeText.getText() != null && !inputSizeText.getText().isEmpty()) && Integer.parseInt(inputSizeText.getText()) > 10) {
                 inputSizeInt = Integer.parseInt(inputSizeText.getText());
@@ -280,168 +365,67 @@ public class Main extends Application {
             System.out.println();
             outputAllArrayTextArea.setText(tmpRandValueHashMap.values().stream().map(Object::toString).collect(joining(";")));
 
-//            List<Double> tmpValuesFromHashMap = new ArrayList<>(inputSizeInt);
-//            tmpValuesFromHashMap.addAll(tmpRandValueHashMap.values().parallelStream().sorted().collect(toList()));
-//            List<Double> removedValues = new ArrayList<>(inputSizeInt - inputSizeFitnessInt);
-//
-//            removedValues.addAll(tmpValuesFromHashMap.subList(inputSizeFitnessInt, tmpValuesFromHashMap.size()));
-//            System.out.println("DEETED size = " + removedValues.size());
-//            for (int i = inputSizeFitnessInt - 1; i < inputSizeInt; i++) {
-//                removedValues.add(tmpValuesFromHashMap.get(i));
-//            }
-
-//            Map<Integer, Double> fitnessFinalMapBeforeGenericVariants = new HashMap<>(inputSizeFitnessInt);
-//            int iteratorCount = 0;
-//            for (Map.Entry<Integer, Double> map : tmpRandValueHashMap.entrySet()) {
-//                if (removedValues.contains(map.getValue())) {
-////                    map.setValue(null);
-//                    continue;
-//                }
-//                fitnessFinalMapBeforeGenericVariants.put(iteratorCount, map.getValue());
-//                iteratorCount++;
-//            }
-
-            for (Map.Entry<Integer, Double> map : tmpRandValueHashMap.entrySet()) {
-                System.out.print("key=" + map.getKey());
-                System.out.println(" value=" + map.getValue());
-            }
-
-
-//            outputFitnessArrayTextArea.setText(tmpRandValueHashMap.values().stream().filter(Objects::nonNull).map(Objects::toString).collect(joining(";")));
-//            System.out.println(tmpRandValueHashMap.values().stream().filter(Objects::nonNull).count());
-
-//            outputFitnessArrayTextArea.setText(fitnessFinalMapBeforeGenericVariants.values().stream().map(Objects::toString).collect(joining(";")));
-//            System.out.println((long) fitnessFinalMapBeforeGenericVariants.values().size());
-
-//            outputFitnessArrayTextArea.setText(sortedRandValueList.toString());
-//            for (int i = 0; i < inputSizeInt; i++) {
-//                double random = ThreadLocalRandom.current().nextDouble(rangeMin, rangeMax);//2 var
-//                String randomValueStr = String.format("%.4f", random);
-//                System.out.print(randomValueStr + ";");
-//            }
-//            System.out.println();
-//            System.out.println("END------------------------END");
-//            System.out.println();
-
-//            for (int i = 0; i < 80; i++) {
-//                System.out.println("Random = " + ThreadLocalRandom.current().nextInt(0, 80));
-//            }
-
-
-//
-//            // TODO: 08.12.2020 genetic classes
-//            MyChromosome firstChromosome = new MyChromosome(top10ResultsByMinSum.get(0));
-//            MyChromosome secondChromosome = new MyChromosome(top10ResultsByMinSum.get(1));
-//            MyChromosome thirdChromosome = new MyChromosome(top10ResultsByMinSum.get(2));
-//            MyChromosome fourthChromosome = new MyChromosome(top10ResultsByMinSum.get(3));
-//            MyChromosome fiveChromosome = new MyChromosome(top10ResultsByMinSum.get(4));
-//            MyChromosome sixChromosome = new MyChromosome(top10ResultsByMinSum.get(5));
-//            MyChromosome sevenChromosome = new MyChromosome(top10ResultsByMinSum.get(6));
-//            MyChromosome eightChromosome = new MyChromosome(top10ResultsByMinSum.get(7));
-//            MyChromosome nineChromosome = new MyChromosome(top10ResultsByMinSum.get(8));
-//            MyChromosome tenChromosome = new MyChromosome(top10ResultsByMinSum.get(9));
-//
-//          TournamentSelection tournamentSelection = new TournamentSelection(10);
-
-////            List<ChromosomePair> chromosomeList = new ArrayList<>(10);
-//            chromosomeList.add(firstChromosome);
-//            List<Chromosome> chromosomes = Arrays.asList(firstChromosome, secondChromosome, thirdChromosome, fourthChromosome, fiveChromosome, sixChromosome, sevenChromosome, eightChromosome, nineChromosome, tenChromosome);
-//
-//
-//            ListPopulation listPopulation = new ListPopulation(chromosomes, 1) {
-//                @Override
-//                public Population nextGeneration() {
-//                    return null;
-//                }
-//            };
-//
-//
-//            ElitisticListPopulation listPopulation = new ElitisticListPopulation(80, 0.9);
-
-//            tournamentSelection.select(listPopulation);
-//            System.out.println(tournamentSelection);
-//            GeneticAlgorithm ga = new GeneticAlgorithm();
-
-//            ChromosomePair pair = tournamentSelection.select();
-
-
         });
     }
 
-    /*
-    public List<List<Double>> genericRandomArraysFromFitnessArray(int sizeOfInputArray, int sizeOfOutputArray, int countOfOutputArrays) {
-        List<List<Double>> outputList = new ArrayList<>(countOfOutputArrays);
-        List<Double> tmpList;
-        RandomDataGenerator randomDataGenerator = new RandomDataGenerator();
-//        Set<Integer> tmpUniqueIndexes;
-//        int countIndex = 0;
-        double sum;
-        for (int i = 0; i < countOfOutputArrays; i++) {
-            sum = 0.0;
-//            countIndex = 0;
-            tmpList = new ArrayList<>(sizeOfOutputArray + 1);
-//            tmpUniqueIndexes = new HashSet<>(sizeOfOutputArray);
-            for (int j = 0; j < sizeOfOutputArray; j++) {
-                int randomInt = randomDataGenerator.nextInt(0, sizeOfInputArray - 1);
-//                while(!tmpUniqueIndexes.contains(randomInt)){
-//                    randomInt = randomDataGenerator.nextInt(0, sizeOfInputArray - 1);
-//                }
-
-//                if(!tmpUniqueIndexes.contains(randomInt)){
-//                    countIndex++;
-//                }
-//                tmpUniqueIndexes.add(randomInt);
-//                int randomInt = ThreadLocalRandom.current().nextInt(0, sizeOfInputArray);
-//                System.out.println(randomInt);
-                double currentValueByKey = tmpRandValueHashMap.get(randomInt);
-                sum += currentValueByKey;
-                tmpList.add(currentValueByKey);
-            }
-            tmpList.add(sizeOfOutputArray, sum);
-            outputList.add(tmpList);
-        }
-
-        return outputList;
-    }
-
-     */
-
-    public List<List<Double>> genericRandomArraysFromFitnessArray(int sizeOfInputArray, int sizeOfOutputArray, int countOfOutputArrays) {
-        List<List<Double>> outputList = new ArrayList<>(countOfOutputArrays);
+    private List<List<Double>> genericRandomArraysFromFitnessArray(int sizeOfInputArray, int sizeOfOutputArray, int countOfOutputIterationArrays) {
+        List<List<Double>> outputList = new ArrayList<>(countOfOutputIterationArrays);
         List<Double> tmpList;
         Set<Integer> tmpUniqueIndexes;
         RandomDataGenerator randomDataGenerator = new RandomDataGenerator();
-        int countIndex = 0;
-        double sum;
-        for (int i = 0; i < countOfOutputArrays; i++) {
-            sum = 0.0;
+        int countIndex; // == 0
+        int randomInt;
+        double currentValueByKey;
+        for (int i = 0; i < countOfOutputIterationArrays; i++) {
             countIndex = 0;
             tmpList = new ArrayList<>(sizeOfOutputArray + 1);
             tmpUniqueIndexes = new HashSet<>(sizeOfOutputArray);
-//            for (int j = 0; j < sizeOfOutputArray; j++) {
             while (countIndex < sizeOfOutputArray) {
-                int randomInt = randomDataGenerator.nextInt(0, sizeOfInputArray - 1);
-//                while(!tmpUniqueIndexes.contains(randomInt)){
-//                    randomInt = randomDataGenerator.nextInt(0, sizeOfInputArray - 1);
-//                }
-
+                randomInt = randomDataGenerator.nextInt(0, sizeOfInputArray - 1);
                 if (!tmpUniqueIndexes.contains(randomInt)) {
                     countIndex++;
                 } else {
                     continue;
                 }
                 tmpUniqueIndexes.add(randomInt);
-//                int randomInt = ThreadLocalRandom.current().nextInt(0, sizeOfInputArray);
-//                System.out.println(randomInt);
-                double currentValueByKey = tmpRandValueHashMap.get(randomInt);
-                sum += currentValueByKey;
+                currentValueByKey = tmpRandValueHashMap.get(randomInt);
                 tmpList.add(currentValueByKey);
             }
-            tmpList.add(sizeOfOutputArray, sum);
+
+            tmpList.add(sizeOfOutputArray, Double.parseDouble(String.format("%.5f", tmpList.stream().mapToDouble(d -> d).sum())
+                    .replace(",", ".")));
             outputList.add(tmpList);
         }
 
+
         return outputList;
+    }
+
+    private HashMap<Integer, Double> genericRandomArrayWithInputLength(int sizeOfInputArray, int sizeOfOutputArray) {
+        HashMap<Integer, Double> result = new HashMap<>(sizeOfOutputArray + 1);
+        Set<Integer> tmpUniqueIndexes = new HashSet<>(sizeOfOutputArray);
+        RandomDataGenerator rdg = new RandomDataGenerator();
+        int randomInt;
+        double sum = 0;
+        double currentValueByKey;
+        int countIndex = 0;
+
+        while (countIndex < sizeOfOutputArray) {
+            randomInt = rdg.nextInt(0, sizeOfInputArray - 1);
+            if (!tmpUniqueIndexes.contains(randomInt)) {
+                countIndex++;
+            } else {
+                continue;
+            }
+            currentValueByKey = tmpRandValueHashMap.get(randomInt);
+            sum += currentValueByKey;
+            tmpUniqueIndexes.add(randomInt);
+            result.putIfAbsent(randomInt, currentValueByKey);
+        }
+
+        result.putIfAbsent(sizeOfInputArray, Double.parseDouble(String.format("%.5f", sum).replace(",", ".")));
+
+        return result;
     }
 
     private void initComponentsOnStartWindow(Stage primaryStage) {
@@ -449,10 +433,13 @@ public class Main extends Application {
         inputSizeText = new IntegerTextField();
         inputSizeFitnessLabel = new Label("Введите необходимое количество катушек");
         inputSizeFitnessText = new IntegerTextField();
+
         btn = new Button();
-        btn.setText("Сгенерировать слчайные числа");
-        btnStartAlgorithm = new Button();
-        btnStartAlgorithm.setText("Применить функцию");
+        btn.setText("Сгенерировать случайные числа");
+        btnStartGeneticAlgorithm = new Button();
+        btnStartGeneticAlgorithm.setText("Применить генетический алгоритм");
+        btnStartSwapAlgorithm = new Button();
+        btnStartSwapAlgorithm.setText("Применить алгоритм обмена");
         btnFinalSelection = new Button();
         btnFinalSelection.setText("Скрещивание");
         btnEvaluateBestSum = new Button();
@@ -504,6 +491,7 @@ public class Main extends Application {
         outputFitnessArrayTextArea9.setEditable(false);
         outputFinalArrayTextArea.setEditable(false);
 //        outputFitnessArrayTextArea.setWrapText(true);
+
         outputFitnessLabel0 = new Label();
         outputFitnessLabel1 = new Label();
         outputFitnessLabel2 = new Label();
@@ -514,11 +502,10 @@ public class Main extends Application {
         outputFitnessLabel7 = new Label();
         outputFitnessLabel8 = new Label();
         outputFitnessLabel9 = new Label();
+        timeToEvaluateByGeneticAlgorithmLbl = new Label();
+        timeToEvaluateBySwapAlgorithmLbl = new Label();
         theBestSumOfTop10Arrays = new Label();
         sumAfterSelectionOfTop10Arrays = new Label();
-
-        //графики
-//        areaChart = new AreaChart<>();
 
         final NumberAxis xAxis = new NumberAxis(1, 1000, 1);
         final NumberAxis yAxis = new NumberAxis();
@@ -549,8 +536,22 @@ public class Main extends Application {
         FlowPane evaluateFinalSumPanel = new FlowPane(Orientation.HORIZONTAL, btnFinalSelection, sumAfterSelectionOfTop10Arrays);
         evaluateSumPanel.setHgap(10);
 
-        FlowPane root = new FlowPane(Orientation.VERTICAL, inputSizeLabel, inputSizeText, inputSizeFitnessLabel, inputSizeFitnessText,
-                btn, outputAllArrayTextArea, btnStartAlgorithm,
+        FlowPane algorithmButtonsPanel = new FlowPane(Orientation.HORIZONTAL, btnStartGeneticAlgorithm, btnStartSwapAlgorithm);
+        algorithmButtonsPanel.setAlignment(Pos.CENTER);
+        algorithmButtonsPanel.setHgap(10);
+
+        Menu m = new Menu("Menu");
+        MenuItem m1 = new MenuItem("menu item 1");
+        MenuItem m2 = new MenuItem("menu item 2");
+        MenuItem m3 = new MenuItem("menu item 3");
+        m.getItems().add(m1);
+        m.getItems().add(m2);
+        m.getItems().add(m3);
+        MenuBar mb = new MenuBar(m);
+        VBox vb = new VBox(mb);
+
+        FlowPane root = new FlowPane(Orientation.VERTICAL, vb, inputSizeLabel, inputSizeText, inputSizeFitnessLabel, inputSizeFitnessText,
+                btn, outputAllArrayTextArea, algorithmButtonsPanel,
                 outputFitnessArrayTextArea0, outputFitnessLabel0, outputFitnessArrayTextArea1, outputFitnessLabel1,
                 outputFitnessArrayTextArea2, outputFitnessLabel2, outputFitnessArrayTextArea3, outputFitnessLabel3,
                 outputFitnessArrayTextArea4, outputFitnessLabel4, outputFitnessArrayTextArea5, outputFitnessLabel5,
@@ -558,17 +559,17 @@ public class Main extends Application {
                 outputFitnessArrayTextArea8, outputFitnessLabel8, outputFitnessArrayTextArea9, outputFitnessLabel9,
                 evaluateSumPanel,
                 evaluateFinalSumPanel,
-                outputFinalArrayTextArea
+                outputFinalArrayTextArea,
+                timeToEvaluateByGeneticAlgorithmLbl, timeToEvaluateBySwapAlgorithmLbl
                 , areaChart
-//                finalElementsSumOfArray
         );
         root.setVgap(10);
-        Scene scene = new Scene(root, 500, 500);
+        Scene scene = new Scene(root, 700, 700);
         primaryStage.setFullScreen(true);
         primaryStage.setScene(scene);
     }
 
-    private void fillOutputTextAreasAndFields() {
+    private void fillOutputTextAreasAndFields(int lastIndexIsSum) {
         outputFitnessArrayTextArea0.setText(String.valueOf(top10ResultsByMinSum.get(0).stream().filter(val -> val < 10).map(Object::toString).count()));
         outputFitnessArrayTextArea0.setText(top10ResultsByMinSum.get(0).stream().filter(val -> val < 10).map(Object::toString).collect(joining(";")));
         outputFitnessArrayTextArea1.setText(top10ResultsByMinSum.get(1).stream().filter(val -> val < 10).map(Object::toString).collect(joining(";")));
@@ -581,16 +582,41 @@ public class Main extends Application {
         outputFitnessArrayTextArea8.setText(top10ResultsByMinSum.get(8).stream().filter(val -> val < 10).map(Object::toString).collect(joining(";")));
         outputFitnessArrayTextArea9.setText(top10ResultsByMinSum.get(9).stream().filter(val -> val < 10).map(Object::toString).collect(joining(";")));
 
-        outputFitnessLabel0.setText("Сумма = " + top10ResultsByMinSum.get(0).get(80).toString());
-        outputFitnessLabel1.setText("Сумма = " + top10ResultsByMinSum.get(1).get(80).toString());
-        outputFitnessLabel2.setText("Сумма = " + top10ResultsByMinSum.get(2).get(80).toString());
-        outputFitnessLabel3.setText("Сумма = " + top10ResultsByMinSum.get(3).get(80).toString());
-        outputFitnessLabel4.setText("Сумма = " + top10ResultsByMinSum.get(4).get(80).toString());
-        outputFitnessLabel5.setText("Сумма = " + top10ResultsByMinSum.get(5).get(80).toString());
-        outputFitnessLabel6.setText("Сумма = " + top10ResultsByMinSum.get(6).get(80).toString());
-        outputFitnessLabel7.setText("Сумма = " + top10ResultsByMinSum.get(7).get(80).toString());
-        outputFitnessLabel8.setText("Сумма = " + top10ResultsByMinSum.get(8).get(80).toString());
-        outputFitnessLabel9.setText("Сумма = " + top10ResultsByMinSum.get(9).get(80).toString());
+        outputFitnessLabel0.setText("Сумма = " + top10ResultsByMinSum.get(0).get(lastIndexIsSum).toString());
+        outputFitnessLabel1.setText("Сумма = " + top10ResultsByMinSum.get(1).get(lastIndexIsSum).toString());
+        outputFitnessLabel2.setText("Сумма = " + top10ResultsByMinSum.get(2).get(lastIndexIsSum).toString());
+        outputFitnessLabel3.setText("Сумма = " + top10ResultsByMinSum.get(3).get(lastIndexIsSum).toString());
+        outputFitnessLabel4.setText("Сумма = " + top10ResultsByMinSum.get(4).get(lastIndexIsSum).toString());
+        outputFitnessLabel5.setText("Сумма = " + top10ResultsByMinSum.get(5).get(lastIndexIsSum).toString());
+        outputFitnessLabel6.setText("Сумма = " + top10ResultsByMinSum.get(6).get(lastIndexIsSum).toString());
+        outputFitnessLabel7.setText("Сумма = " + top10ResultsByMinSum.get(7).get(lastIndexIsSum).toString());
+        outputFitnessLabel8.setText("Сумма = " + top10ResultsByMinSum.get(8).get(lastIndexIsSum).toString());
+        outputFitnessLabel9.setText("Сумма = " + top10ResultsByMinSum.get(9).get(lastIndexIsSum).toString());
     }
 
+    private void startTimeOfEvaluatingGeneticFunction() {
+        startGeneticFunctionTime = System.currentTimeMillis();
+    }
+
+    private void finishTimeOfEvaluatingGeneticFunction() {
+        finishGeneticFunctionTime = System.currentTimeMillis();
+        if (finishGeneticFunctionTime > startGeneticFunctionTime) {
+            differenceGeneticFunctionTime = (finishGeneticFunctionTime - startGeneticFunctionTime) / 1000; // ms -> seconds
+            System.out.println("Время выполнения генетическим алгоритмом = " + differenceGeneticFunctionTime + " секунд");
+            timeToEvaluateByGeneticAlgorithmLbl.setText("Время выполнения генетическим алгоритмом = " + differenceGeneticFunctionTime + " с");
+        }
+    }
+
+    private void startTimeOfEvaluatingSwapFunction() {
+        startSwapFunctionTime = System.currentTimeMillis();
+    }
+
+    private void finishTimeOfEvaluatingSwapFunction() {
+        finishSwapFunctionTime = System.currentTimeMillis();
+        if (finishSwapFunctionTime > startSwapFunctionTime) {
+            differenceSwapFunctionTime = (finishSwapFunctionTime - startSwapFunctionTime) / 1000; // ms -> seconds
+            System.out.println("Время выполнения алгоритма обмена = " + differenceSwapFunctionTime + " секунд");
+            timeToEvaluateBySwapAlgorithmLbl.setText("Время выполнения алгоритмом обмена = " + differenceSwapFunctionTime + " с");
+        }
+    }
 }
